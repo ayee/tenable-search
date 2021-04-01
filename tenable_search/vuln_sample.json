@@ -1,0 +1,45 @@
+{
+  "vuln_id": "5e2cab9e-a63d-4016-97aa-4c9a336c9b53"
+  "scan_id": "cd8a58db-af6c-47b3-b402-dd34021fa419"
+  "plugin_id": 98000
+  "created_at": "2020-12-07T20:01:19Z"
+  "uri": "http://example.com/"
+  "is_page": false
+  "details": {
+    "input_name": NULL
+    "input_type": NULL
+    "output": "Engine
+    Version
+    1.8.0_DEVELOP_SNAPSHOT-1518
+    Scan
+    ID
+    cd8a58db-af6c-47b3-b402-dd34021
+    ...
+    "
+    "proof": NULL
+    "payload": NULL
+    "selector": NULL
+    "selector_url": NULL
+    "signature": NULL
+    "request": NULL
+    "response": NULL
+  }
+  "attachments": [
+    {
+      "attachment_id": "c7adb5af-7646-429e-880d-3c8812dc4185"
+      "created_at": "2020-12-07T20:01:23.650014Z"
+      "attachment_name": "configuration.csv"
+      "md5": "md5:48be107f67f1cdc0e9d63a8f6cafc27e"
+      "file_type": "text/plain"
+      "size": 2184
+    }
+    {
+      "attachment_id": "d5a3104d-2e60-4e71-a2cb-e24ea67f00f8"
+      "created_at": "2020-12-07T20:01:23.595659Z"
+      "attachment_name": "plugins.csv"
+      "md5": "md5:3ad245715cdb6856430dd1e71f7cb522"
+      "file_type": "text/plain"
+      "size": 3236
+    }
+  ]
+}

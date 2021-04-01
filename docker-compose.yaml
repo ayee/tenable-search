@@ -16,6 +16,7 @@ services:
     networks:
       - backend
     volumes:
+      # mount a local directory for postgres database files
       - ./postgres_data:/var/lib/postgresql/data/
       - ./data/:/home/data/
 

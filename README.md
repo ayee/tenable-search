@@ -78,15 +78,15 @@ Use this to bulk load from JSON file into JSONB column
    
 Retrieve an asset by IPv4.  The JSONB operator `@>` checks if 
 `jdoc`JSON object contains the JSON ipv4 key with the specified value at the top level.  Not that this works array of multiple IPv4 values.  That means the query would return an asset with the `ipv4` element being an array of values like this `["145.14.140.28", "25.150.68.229"]`
-```postgresql
+```sql
 SELECT * FROM assets 
     WHERE jdoc @> '{"ipv4": ["25.150.68.229"]}'
 ```
 Retrieve an asset matched by any of multiple attributes.  
-```postgresql
-select jdoc->>'id' from assets 
-    where jdoc @> '{"ipv4": ["25.150.68.229"]}' 
-    or jdoc @> '{"fqdn": ["tnxlphzmyv"]}';
+```sql
+SELECT jdoc->>'id' FROM assets 
+    WHERE jdoc @> '{"ipv4": ["25.150.68.229"]}' 
+    OR jdoc @> '{"fqdn": ["tnxlphzmyv"]}';
 ```
 
 Delete a single asset matching the asset UUID
@@ -97,9 +97,9 @@ DELETE FROM assets
 Delete 10000 assets matching randomly chosen UUIDs.
 This query takes about 360ms on 350K rows table.  Excluding scan time, the deletion takes about 300ms
 ```sql
-DELETE FROM assets where jdoc->>'id' IN 
+DELETE FROM assets WHERE jdoc->>'id' IN 
     (SELECT jdoc->>'id' FROM assets 
-        OFFSET floor(random()*(select count(*) from assets)) 
+        OFFSET floor(random()*(SELECT count(*) FROM assets)) 
         LIMIT 10000);
 ```
     
