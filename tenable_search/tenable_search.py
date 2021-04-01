@@ -13,17 +13,15 @@ class TenableSearch:
     '''
     Class abstraction of all objects retrieved from Tenable.io
     '''
-    access_key = 'f4093b4d2601b8e9722999ed1fed28916e9f285fa116baa8118fee130ef62d67'
-    secret_key = '9ed1f218605eceac2306768369a0cac0a951cd31ced8fc2f39dfb49c88c55d67'
-    tio = TenableIO(access_key, secret_key)
     conn = None
+    tio = None
 
     def __init__(self, access, secret):
         # print(pkg_resources.resource_stream(__name__, 'settings.yml'))
         with pkg_resources.resource_stream(__name__, r'settings.yml') as file:
             properties = yaml.full_load(file)
+        self.tio = TenableIO(properties['access_key'], properties['secret_key'])
         self.conn = self.create_connection(**properties)
-
 
     def create_connection(self, db_name, db_user, db_password, db_host, db_port):
         ''' Create postgres connection with psycopg2
