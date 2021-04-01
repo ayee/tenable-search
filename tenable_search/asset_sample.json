@@ -1,0 +1,25 @@
+{
+  "id": "b4df99b1-e06e-4aca-af12-5e09afcbfc00",
+  "has_agent": false,
+  "last_seen": "2019-08-21T23:57:31.118Z",
+  "last_scan_target": "192.168.1.125",
+  "sources": [
+    {
+      "name": "NESSUS_SCAN",
+      "first_seen": "2019-08-21T23:57:31.118Z",
+      "last_seen": "2019-08-21T23:57:31.118Z"
+    }
+  ],
+  "ipv4": [
+    "192.168.1.125"
+  ],
+  "ipv6": [],
+  "fqdn": [],
+  "netbios_name": [],
+  "operating_system": [],
+  "agent_name": [],
+  "aws_ec2_name": [],
+  "security_protection_level": null,
+  "security_protections": [],
+  "mac_address": []
+}

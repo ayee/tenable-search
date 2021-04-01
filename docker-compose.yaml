@@ -1,0 +1,34 @@
+version: '3'
+
+services:
+
+  postgres:
+    image: postgres:9.5-alpine
+    build:
+      context: ./postgres-docker
+    restart: always
+
+    environment:
+      POSTGRES_USER: 'admin'
+      POSTGRES_PASSWORD: 'secret'
+    ports:
+      - "5432:5432"
+    networks:
+      - backend
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data/
+      - ./data/:/home/data/
+
+  pytenable-client:
+    build:
+      context: pytenable-client-docker
+    networks:
+      - backend
+#    depends_on:
+#      - postgres
+#    restart: always
+#    command: ["wait-for-it.sh", "db:5432", "--", "python"]
+    command: tail -f /dev/null
+
+networks:
+  backend:
