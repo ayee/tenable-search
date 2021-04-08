@@ -23,7 +23,8 @@ class TenableSearch:
         self.tio = TenableIO(properties['access_key'], properties['secret_key'])
         self.conn = self.create_connection(**properties)
 
-    def create_connection(self, db_name, db_user, db_password, db_host, db_port):
+    # def create_connection(self, db_name, db_user, db_password, db_host, db_port):
+    def create_connection(selfs, **kwargs):
         ''' Create postgres connection with psycopg2
         :param db_name: name of database
         :param db_user:
@@ -36,11 +37,11 @@ class TenableSearch:
         try:
             conn = psycopg2.connect(
                 # connection_factory=MyLoggingConnection,
-                database=db_name,
-                user=db_user,
-                password=db_password,
-                host=db_host,
-                port=db_port,
+                database=kwargs['db_name'],
+                user=kwargs['db_user'],
+                password=kwargs['db_password'],
+                host=kwargs['db_host'],
+                port=kwargs['db_port'],
             )
             # conn.initialize(logger)
             print("Connection to PostgreSQL DB successful")
@@ -65,9 +66,9 @@ class TenableSearch:
             logger("The error '{}' occurred".format(e))
 
 
-    def populate_assets(self, size=None):
+    def populate_assets(self, size=None, vuln_asset_ratio=2):
         '''
-        Download and populate assets to db
+        Populate mock assets and vulnerabilities to database
         :return:
         '''
         import time
@@ -79,16 +80,30 @@ class TenableSearch:
             # https://gist.github.com/revbucket/ccecce8b9f3971077354de307ee680c2
             with pkg_resources.resource_stream(__name__, 'asset_sample.json') as f:
                 asset = json.loads(f.read())
+            with pkg_resources.resource_stream(__name__, 'vuln_sample.json') as f:
+                vuln = json.loads(f.read())
             for i in range(size):
-                asset['id'] = str(uuid.uuid4())
-                asset['ipv4'] = [socket.inet_ntoa(struct.pack('>I', random.randint(1, 0xffffffff)))
+                asset_uuid = str(uuid.uuid4())
+                asset_ips = [socket.inet_ntoa(struct.pack('>I', random.randint(1, 0xffffffff)))
                                  for i in range(random.randint(1, 3))]
+                asset_fqdn = [''.join(random.choice(string.ascii_lowercase) for i in range(10))]
+                asset['id'] = asset_uuid
+                asset['ipv4'] = asset_ips
+                asset['fqdn'] = asset_fqdn
                 asset['last_scan_target'] = socket.inet_ntoa(struct.pack('>I', random.randint(1, 0xffffffff)))
-                asset['fqdn'] = [''.join(random.choice(string.ascii_lowercase) for i in range(10))]
+
                 cursor.execute("INSERT INTO assets (jdoc) VALUES (%s)", (json.dumps(asset),))
+
+                vuln['asset']['uuid'] = asset_uuid
+                vuln['asset']['fqdn'] = asset_fqdn
+                vuln['asset']['ipv4'] = asset_ips[0]
+
+                for j in range(vuln_asset_ratio):
+                    cursor.execute("INSERT INTO vulns (jdoc) VALUES (%s)", (json.dumps(vuln),))
+
             end = time.time()
-            logger.info('{} randomly generated mock assets populated'.format(size))
-            logger.info("Asset population completed in {}s".format(end - start))
+            logger.info('Populated {} mock assets and {} vulnerabilities in database'.format(size, size*vuln_asset_ratio))
+            logger.info("Asset and vulnerability population completed in {}s".format(end - start))
         else:
             for asset in self.tio.assets.list():
                 cursor.execute("INSERT INTO assets (jdoc) VALUES (%s)", (json.dumps(asset),))
@@ -100,6 +115,9 @@ class TenableSearch:
         result = self.execute_read_query("SELECT COUNT (*) FROM assets")
         return result[0][0]
 
+    def count_vulns(self):
+        result = self.execute_read_query("SELECT COUNT (*) FROM vulns")
+        return result[0][0]
 
     def write_assets(self, outfile):
         '''
@@ -113,12 +131,11 @@ class TenableSearch:
                 json.dump(asset, outfile)
                 outfile.write('\n')
 
-
-    def delete_all_assets(self):
+    def delete_all_assets_and_vulns(self):
         cursor = self.conn.cursor()
         cursor.execute('DELETE FROM assets')
+        cursor.execute('DELETE FROM vulns')
         self.conn.commit()
-
 
     def reset_database(self):
         '''
@@ -170,34 +187,14 @@ class TenableSearch:
         return result
 
 
-def populate_assets(conn, size):
-    '''
-    Populate with mock asset data
-    :param conn:
-    :param size:
-    :return:
-    '''
-    # TODO: enhance with bulk loading https://gist.github.com/revbucket/ccecce8b9f3971077354de307ee680c2
-    # autocommit_orig = conn.autocommit
-    # conn.autocommit = True
-    cursor = conn.cursor()
+    def start_download_vulns(self):
+        '''
+        Get n vulnerabilities
+        :return:
+        '''
+        for vuln in self.tio.exports.vulns(severity=['critical']):
+            print(json.dumps(vuln))
 
-    asset = {"id": "b4df99b1-e06e-4aca-af12-5e09afcbfc00",
-             "has_agent": False, "last_seen": "2019-08-21T23:57:31.118Z",
-             "last_scan_target": "192.168.1.125",
-             "sources": [{"name": "NESSUS_SCAN", "first_seen": "2019-08-21T23:57:31.118Z",
-                          "last_seen": "2019-08-21T23:57:31.118Z"}],
-             "ipv4": ["192.168.1.125"], "ipv6": [], "fqdn": [], "netbios_name": [],
-             "operating_system": [], "agent_name": [], "aws_ec2_name": [],
-             "security_protection_level": None, "security_protections": [], "mac_address": []}
-
-
-    for i in range(size):
-        asset['id'] = str(uuid.uuid4())
-        cursor.execute("INSERT INTO asset (asset_data) VALUES (%s)", (json.dumps(asset),))
-
-    conn.commit()
-    # conn.autocommit = autocommit_orig
 
 def write_assets(outfile):
     '''
@@ -215,21 +212,6 @@ def write_assets(outfile):
             json.dump(asset, outfile)
             outfile.write('\n')
 
-
-def insert_asset_orm(conn, asset):
-    '''
-    Insert asset using sqlalchemy orm
-    :param conn:
-    :return:
-    '''
-    m = sqlalchemy.MetaData()
-    asset_table = sqlalchemy.Table('asset', m,
-                                   sqlalchemy.Column('id', sqlalchemy.Integer, primary_key=True),
-                                   sqlalchemy.Column('asset_data', JSONB))
-    conn.execute(
-        asset_table.insert(),
-        asset_data = asset
-    )
 
 
 # MyLoggingCursor simply sets self.timestamp at start of each query

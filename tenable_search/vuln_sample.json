@@ -1,45 +1,141 @@
 {
-  "vuln_id": "5e2cab9e-a63d-4016-97aa-4c9a336c9b53"
-  "scan_id": "cd8a58db-af6c-47b3-b402-dd34021fa419"
-  "plugin_id": 98000
-  "created_at": "2020-12-07T20:01:19Z"
-  "uri": "http://example.com/"
-  "is_page": false
-  "details": {
-    "input_name": NULL
-    "input_type": NULL
-    "output": "Engine
-    Version
-    1.8.0_DEVELOP_SNAPSHOT-1518
-    Scan
-    ID
-    cd8a58db-af6c-47b3-b402-dd34021
-    ...
-    "
-    "proof": NULL
-    "payload": NULL
-    "selector": NULL
-    "selector_url": NULL
-    "signature": NULL
-    "request": NULL
-    "response": NULL
-  }
-  "attachments": [
-    {
-      "attachment_id": "c7adb5af-7646-429e-880d-3c8812dc4185"
-      "created_at": "2020-12-07T20:01:23.650014Z"
-      "attachment_name": "configuration.csv"
-      "md5": "md5:48be107f67f1cdc0e9d63a8f6cafc27e"
-      "file_type": "text/plain"
-      "size": 2184
+  "asset": {
+    "agent_uuid": "365a74428ca842469030e3f4d547b6b0",
+    "bios_uuid": "42288a43-fae9-2952-9cc1-50183e794084",
+    "device_type": "general-purpose",
+    "fqdn": "posh-possum",
+    "hostname": "posh-possum",
+    "uuid": "14c232fa-2e9e-41e4-ac4e-997e32ff215e",
+    "ipv4": "10.100.1.11",
+    "last_authenticated_results": "2021-03-18T21:23:24Z",
+    "mac_address": "52:54:00:27:C4:DC",
+    "operating_system": [
+      "Linux Kernel 3.10.0-957.10.1.el7.x86_64 on CentOS Linux release 7.6.1810 (Core)"
+    ],
+    "network_id": "00000000-0000-0000-0000-000000000000",
+    "tracked": true
+  },
+  "output": "\nRemote package installed : kernel-3.10.0-957.10.1.el7\nShould be                : kernel-3.10.0-1062.12.1.el7\n\nRemote package installed : kernel-tools-3.10.0-957.10.1.el7\nShould be                : kernel-tools-3.10.0-1062.12.1.el7\n\nRemote package installed : kernel-tools-libs-3.10.0-957.10.1.el7\nShould be                : kernel-tools-libs-3.10.0-1062.12.1.el7\n\nRemote package installed : python-perf-3.10.0-957.10.1.el7\nShould be                : python-perf-3.10.0-1062.12.1.el7\n\n",
+  "plugin": {
+    "cpe": [
+      "p-cpe:/a:centos:centos:bpftool",
+      "p-cpe:/a:centos:centos:kernel",
+      "p-cpe:/a:centos:centos:kernel-debug-devel",
+      "p-cpe:/a:centos:centos:kernel-abi-whitelists",
+      "p-cpe:/a:centos:centos:kernel-debug",
+      "p-cpe:/a:centos:centos:kernel-headers",
+      "cpe:/o:centos:centos:7",
+      "p-cpe:/a:centos:centos:python-perf",
+      "p-cpe:/a:centos:centos:kernel-tools-libs-devel",
+      "p-cpe:/a:centos:centos:kernel-tools-libs",
+      "p-cpe:/a:centos:centos:kernel-devel",
+      "p-cpe:/a:centos:centos:perf",
+      "p-cpe:/a:centos:centos:kernel-doc",
+      "p-cpe:/a:centos:centos:kernel-tools"
+    ],
+    "cve": [
+      "CVE-2019-14895",
+      "CVE-2019-14901",
+      "CVE-2019-14898",
+      "CVE-2019-17133",
+      "CVE-2019-14816"
+    ],
+    "cvss3_base_score": 9.8,
+    "cvss3_temporal_score": 8.5,
+    "cvss3_temporal_vector": {
+      "exploitability": "Unproven",
+      "remediation_level": "Official-fix",
+      "report_confidence": "Confirmed",
+      "raw": "E:U/RL:O/RC:C"
+    },
+    "cvss3_vector": {
+      "access_complexity": "Low",
+      "access_vector": "Network",
+      "availability_impact": "High",
+      "confidentiality_impact": "High",
+      "integrity_impact": "High",
+      "raw": "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+    },
+    "cvss_base_score": 10.0,
+    "cvss_temporal_score": 7.4,
+    "cvss_temporal_vector": {
+      "exploitability": "Unproven",
+      "remediation_level": "Official-fix",
+      "report_confidence": "Confirmed",
+      "raw": "E:U/RL:OF/RC:C"
+    },
+    "cvss_vector": {
+      "access_complexity": "Low",
+      "access_vector": "Network",
+      "authentication": "None required",
+      "availability_impact": "Complete",
+      "confidentiality_impact": "Complete",
+      "integrity_impact": "Complete",
+      "raw": "AV:N/AC:L/Au:N/C:C/I:C/A:C"
+    },
+    "description": "An update for kernel is now available for Red Hat Enterprise Linux 7.\n\nRed Hat Product Security has rated this update as having a security\nimpact of Important. A Common Vulnerability Scoring System (CVSS) base\nscore, which gives a detailed severity rating, is available for each\nvulnerability from the CVE link(s) in the References section.\n\nThe kernel packages contain the Linux kernel, the core of any Linux\noperating system.\n\nSecurity Fix(es) :\n\n* kernel: heap overflow in mwifiex_update_vs_ie() function of Marvell\nWiFi driver (CVE-2019-14816)\n\n* kernel: heap-based buffer overflow in mwifiex_process_country_ie()\nfunction in drivers/net/wireless/marvell/mwifiex/sta_ioctl.c\n(CVE-2019-14895)\n\n* kernel: heap overflow in marvell/mwifiex/tdls.c (CVE-2019-14901)\n\n* kernel: buffer overflow in cfg80211_mgd_wext_giwessid in\nnet/wireless/ wext-sme.c (CVE-2019-17133)\n\n* kernel: incomplete fix for race condition between mmget_not_zero()/\nget_task_mm() and core dumping in CVE-2019-11599 (CVE-2019-14898)\n\nFor more details about the security issue(s), including the impact, a\nCVSS score, acknowledgments, and other related information, refer to\nthe CVE page(s) listed in the References section.\n\nBug Fix(es) :\n\n* [Azure][7.8] Include patch 'PCI: hv: Avoid use of\nhv_pci_dev->pci_slot after freeing it' (BZ#1766089)\n\n* [Hyper-V][RHEL7.8] When accelerated networking is enabled on RedHat,\nnetwork interface(eth0) moved to new network namespace does not obtain\nIP address. (BZ#1766093)\n\n* [Azure][RHEL 7.6] hv_vmbus probe pass-through GPU card failed\n(BZ#1766097)\n\n* SMB3: Do not error out on large file transfers if server responds\nwith STATUS_INSUFFICIENT_RESOURCES (BZ#1767621)\n\n* Since RHEL commit 5330f5d09820 high load can cause dm-multipath path\nfailures (BZ#1770113)\n\n* Hard lockup in free_one_page()->_raw_spin_lock() because sosreport\ncommand is reading from /proc/pagetypeinfo (BZ#1770732)\n\n* patchset for x86/atomic: Fix smp_mb__{before,after}_atomic()\n(BZ#1772812)\n\n* fix compat statfs64() returning EOVERFLOW for when\n_FILE_OFFSET_BITS=64 (BZ #1775678)\n\n* Guest crash after load cpuidle-haltpoll driver (BZ#1776289)\n\n* RHEL 7.7 long I/O stalls with bnx2fc from not masking off scope bits\nof retry delay value (BZ#1776290)\n\n* Multiple 'mv' processes hung on a gfs2 filesystem (BZ#1777297)\n\n* Moving Egress IP will result in conntrack sessions being DESTROYED\n(BZ# 1779564)\n\n* core: backports from upstream (BZ#1780033)\n\n* kernel BUG at arch/powerpc/platforms/pseries/lpar.c:482!\n(BZ#1780148)\n\n* Race between tty_open() and flush_to_ldisc() using the tty_struct->\ndriver_data field. (BZ#1780163)",
+    "exploitability_ease": "No known exploits are available",
+    "family": "CentOS Local Security Checks",
+    "family_id": 18,
+    "has_patch": true,
+    "id": 134087,
+    "name": "CentOS 7 : kernel (CESA-2020:0374)",
+    "patch_publication_date": "2020-02-26T00:00:00Z",
+    "modification_date": "2020-03-02T00:00:00Z",
+    "publication_date": "2020-02-27T00:00:00Z",
+    "risk_factor": "Critical",
+    "see_also": [
+      "http://www.nessus.org/u?65128778"
+    ],
+    "solution": "Update the affected kernel packages.",
+    "synopsis": "The remote CentOS host is missing one or more security updates.",
+    "type": "local",
+    "version": "1.2",
+    "vuln_publication_date": "2019-09-20T00:00:00Z",
+    "xrefs": [
+      {
+        "type": "RHSA",
+        "id": "2020:0374"
+      }
+    ],
+    "vpr": {
+      "score": 5.9,
+      "drivers": {
+        "age_of_vuln": {
+          "lower_bound": 181,
+          "upper_bound": 365
+        },
+        "exploit_code_maturity": "UNPROVEN",
+        "cvss_impact_score_predicted": false,
+        "cvss3_impact_score": 5.9,
+        "threat_intensity_last28": "VERY_LOW",
+        "threat_recency": {
+          "lower_bound": 121,
+          "upper_bound": 365
+        },
+        "threat_sources_last28": [
+          "No recorded events"
+        ],
+        "product_coverage": "LOW"
+      },
+      "updated": "2021-03-17T05:30:27.000Z"
     }
-    {
-      "attachment_id": "d5a3104d-2e60-4e71-a2cb-e24ea67f00f8"
-      "created_at": "2020-12-07T20:01:23.595659Z"
-      "attachment_name": "plugins.csv"
-      "md5": "md5:3ad245715cdb6856430dd1e71f7cb522"
-      "file_type": "text/plain"
-      "size": 3236
-    }
-  ]
+  },
+  "port": {
+    "port": 0,
+    "protocol": "TCP"
+  },
+  "scan": {
+    "completed_at": "2021-03-18T21:54:37.965Z",
+    "schedule_uuid": "template-04d9a4b1-4c56-35c5-956e-5f8752c63082737e92279b987610",
+    "started_at": "2021-03-18T21:08:53.952Z",
+    "uuid": "4bb8ec69-cc93-48e1-87f1-e975d4008271"
+  },
+  "severity": "critical",
+  "severity_id": 4,
+  "severity_default_id": 4,
+  "severity_modification_type": "NONE",
+  "first_found": "2021-01-08T20:03:36.487Z",
+  "last_found": "2021-03-18T21:54:37.965Z",
+  "state": "OPEN"
 }

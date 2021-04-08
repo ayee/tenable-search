@@ -2,7 +2,7 @@
 Tenable-search project implements a search index of assets and vulnerabilities extracted from Tenable.io
 
 ### Source code structure
-- tenable_search : Python code to be run as a Python client continously to download assets and vulnerabilities from Tenable bulk object download APIs, and write/index them into a Postgres database
+- tenable_search : Python code to be run as a Python client continuously to download assets and vulnerabilities from Tenable bulk object download APIs, and write/index them into a Postgres database
 
 - Tenable-search project uses [docker-compose](https://docs.docker.com/compose/) to construct 2 Docker containers: `postgres-docker` for hosting the Postgres database and the other `pytenable-client-docker` for the Python client
 
@@ -16,9 +16,11 @@ Tenable-search project implements a search index of assets and vulnerabilities e
 Default implementation uses Postgres JSONB column to store and index JSON objects to allow fast search queries.
 #### Assets table
 id - The UUID of the asset. Use this value as the unique key for the asset.  This value is extracted from the asset JSON 
-
-updated_at - The time and date of the scan that most recently identified the asset. 
-
+jdoc - Asset JSON objects
+#### Vulns table
+ 
+#### Generate mock data
+Run [`test_populate_100k_assets`](tenable_search/test_tenable_search.py) testcase to populate mock assets and vulnerabilities
 
 ### Asset Retrieval and Update
 Set up a schedule to execute asset update

@@ -34,7 +34,8 @@ class TestTenableSearch(TestCase):
         self.assertEqual(count2, count1+n, "Failed to populate {} assets".format(n))
 
     def test_delete_all_assets(self):
-        self._search.delete_all_assets()
+        self._search.delete_all_assets_and_vulns()
+        self.assertEqual(self._search.count_assets(), 0, "Failed to delete all assets")
         self.assertEqual(self._search.count_assets(), 0, "Failed to delete all assets")
 
     def test_search_asset(self):
@@ -44,7 +45,7 @@ class TestTenableSearch(TestCase):
         res2 = self._search.search_asset(ipv4 = [ip])
         self.assertEqual(res1, res2, "Failed to retrieve asset with ipv4")
 
-    def test_delete_n_assets_by_id(self):
+    def test_delete_n_assets(self):
         # retrieve n random assets
         n = 1000
         table_size = self._search.execute_read_query("SELECT COUNT(*) FROM assets")
@@ -64,6 +65,10 @@ class TestTenableSearch(TestCase):
         # res1 = self._search.execute_read_query(
         #     "SELECT * FROM assets WHERE jdoc -> 'fqdn' <> '[]'::jsonb OFFSET floor(random()*100000) LIMIT 1;"
         # )
+
+    def test_download_vulns(self):
+        self._search.start_download_vulns()
+
 
     def test_get_tenable_database_size(self):
         db_size = self._search.get_size()
