@@ -30,6 +30,8 @@ services:
 #    restart: always
 #    command: ["wait-for-it.sh", "db:5432", "--", "python"]
     command: tail -f /dev/null
+    volumes:
+    - ./tenable_search/:/opt/tenable_search/
 
 networks:
   backend:

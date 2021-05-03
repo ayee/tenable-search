@@ -22,6 +22,11 @@ jdoc - Asset JSON objects
 #### Generate mock data
 Run [`test_populate_100k_assets`](tenable_search/test_tenable_search.py) testcase to populate mock assets and vulnerabilities
 
+### Scheduled 
+The periodic export and indexing job can be scheduled with 2 trigger types: 
+interval: use when you want to run the job at fixed intervals of time
+cron: use when you want to run the job periodically at certain time(s) of day
+
 ### Asset Retrieval and Update
 Set up a schedule to execute asset update
 For the first time ever run, execute TenableIO.exports.assets 

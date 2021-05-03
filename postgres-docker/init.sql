@@ -15,6 +15,15 @@ CREATE TABLE IF NOT EXISTS vulns (
 );
 CREATE INDEX vulnidx ON vulns USING GIN (jdoc);
 
+CREATE TABLE IF NOT EXISTS export_jobs (
+    id SERIAL,
+    checkpoint TIMESTAMP,
+    job_start TIMESTAMP,
+    job_end TIMESTAMP,
+)
+
+
+
 
 
 

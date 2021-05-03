@@ -1,13 +1,27 @@
 import json, logging, time, uuid, yaml, pkg_resources, string
-import random, socket, struct
-
+import random, socket, struct, os, argparse
+from datetime import datetime, timezone
 import psycopg2, psycopg2.extensions
-from psycopg2 import OperationalError
+from psycopg2 import OperationalError, sql
 from psycopg2.extras import LoggingConnection, LoggingCursor, Json
 from tenable.io import TenableIO
+from apscheduler.schedulers.background import BackgroundScheduler
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+from functools import wraps
+def timeit(func):
+    @wraps(func)
+    def _time_it(*args, **kwargs):
+        start = time.perf_counter()
+        try:
+            return func(*args, **kwargs)
+        finally:
+            end_ = time.perf_counter() - start
+            logger.info(f"{func.__name__} total exec time={end_ * 1000:.2f}ms {'['+str(args[1])+']' if len(args)>1 else ''} ")
+    return _time_it
+
 
 class TenableSearch:
     '''
@@ -15,13 +29,16 @@ class TenableSearch:
     '''
     conn = None
     tio = None
+    # timestamp at which the last export was executed,
+    # 0 if export has never been executed
+    checkpoint = 0
 
     def __init__(self, access, secret):
-        # print(pkg_resources.resource_stream(__name__, 'settings.yml'))
         with pkg_resources.resource_stream(__name__, r'settings.yml') as file:
             properties = yaml.full_load(file)
         self.tio = TenableIO(properties['access_key'], properties['secret_key'])
         self.conn = self.create_connection(**properties)
+        self.checkpoint = self.execute_read_query("select max(checkpoint) from export_jobs where job_end is not null")
 
     # def create_connection(self, db_name, db_user, db_password, db_host, db_port):
     def create_connection(selfs, **kwargs):
@@ -43,36 +60,28 @@ class TenableSearch:
                 host=kwargs['db_host'],
                 port=kwargs['db_port'],
             )
+            conn.autocommit = False
             # conn.initialize(logger)
             print("Connection to PostgreSQL DB successful")
         except OperationalError as e:
             print("The error '{}' occurred".format(e))
         return conn
 
-
+    @timeit
     def execute_read_query(self, query):
-        import time
-        start = time.time()
-
         cursor = self.conn.cursor()
         result = None
         try:
             cursor.execute(query)
             result = cursor.fetchall()
-            end = time.time()
-            logger.info("Query [{}] took {}".format(query, end - start))
+            # logger.info("Query [{}] took {}".format(query, end - start))
             return result
         except OperationalError as e:
-            logger("The error '{}' occurred".format(e))
+            logger.error("The error '{}' occurred".format(e))
 
-
+    @timeit
     def populate_assets(self, size=None, vuln_asset_ratio=2):
-        '''
-        Populate mock assets and vulnerabilities to database
-        :return:
-        '''
-        import time
-        start = time.time()
+        """Populate mock assets and vulnerabilities to databa"""
         cursor = self.conn.cursor()
         if size is not None:
             # if size specified, populate with random mock assets
@@ -101,15 +110,12 @@ class TenableSearch:
                 for j in range(vuln_asset_ratio):
                     cursor.execute("INSERT INTO vulns (jdoc) VALUES (%s)", (json.dumps(vuln),))
 
-            end = time.time()
             logger.info('Populated {} mock assets and {} vulnerabilities in database'.format(size, size*vuln_asset_ratio))
-            logger.info("Asset and vulnerability population completed in {}s".format(end - start))
         else:
             for asset in self.tio.assets.list():
                 cursor.execute("INSERT INTO assets (jdoc) VALUES (%s)", (json.dumps(asset),))
 
         self.conn.commit()
-
 
     def count_assets(self):
         result = self.execute_read_query("SELECT COUNT (*) FROM assets")
@@ -119,32 +125,40 @@ class TenableSearch:
         result = self.execute_read_query("SELECT COUNT (*) FROM vulns")
         return result[0][0]
 
-    def write_assets(self, outfile):
-        '''
-        Export assets and save them in a file
+    def write_assets_to_file(self, outfile):
+        """
+        Save assets in a file
         :param outfile:
         :return:
-        '''
+        """
         # store all assets into a file, one json each line
         with open('../data/assets.json', 'a') as outfile:
             for asset in self.tio.assets.list():
                 json.dump(asset, outfile)
                 outfile.write('\n')
 
-    def delete_all_assets_and_vulns(self):
+    def delete_all_tables(self):
         cursor = self.conn.cursor()
         cursor.execute('DELETE FROM assets')
         cursor.execute('DELETE FROM vulns')
+        cursor.execute('DELETE FROM export_jobs')
+
+        # Run full vacuum to clear up database
+        old_isolation_level = self.conn.isolation_level
+        self.conn.set_isolation_level(0)
+        cursor = self.conn.cursor()
+        cursor.execute("VACUUM FULL")
         self.conn.commit()
+        self.conn.set_isolation_level(old_isolation_level)
 
     def reset_database(self):
-        '''
+        """
         Drop and recreate database.  All data will be lost
         :return:
-        '''
-        with self.conn as cursor:
-            cursor.execute(open("../postgres-docker/init.sql", "r").read())
-
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(open("../postgres-docker/init.sql", "r").read())
+        self.conn.commit()
 
     def get_size(self):
         '''
@@ -164,109 +178,79 @@ class TenableSearch:
         )
         return cursor.fetchall()[0][0]
 
-    def retrieve_assets(self):
-        '''
-        Retrieve all assets from Tenable.io API and load them in search index
-        :return:
-        '''
-        for asset in tio.assets.list():
-            json.dump(asset, outfile)
-            outfile.write('\n')
-
-
     def search_asset(self, **kwargs):
-        '''
+        """
         Find assets where keys and values match as passed with parameters
         e.g. search_asset(conn, id='3a7efde2-7106-495a-acb7-3157c56dec41')
         search_asset(conn, id='3a7efde2-7106-495a-acb7-3157c56dec41', has_agent=True)
         :param kwargs:
         :return: list of assets (as dicts), empty list if nothing found
-        '''
+        """
         query = '''SELECT * FROM assets WHERE jdoc @> %s''' % Json(kwargs)
         result = self.execute_read_query(query)
         return result
 
-
-    def start_download_vulns(self):
+    def export_all(self):
         '''
-        Get n vulnerabilities
+        Export and index all objects
         :return:
         '''
-        for vuln in self.tio.exports.vulns(severity=['critical']):
-            print(json.dumps(vuln))
+        # if tables are not empty, error out
+        logger.info('Initializing assets export')
+        self.insert_objects('assets', self.tio.exports.assets())
+        self.insert_objects('vulns', self.tio.exports.vulns())
+
+    def run_export_job(self):
+        """
+        Run scheduled job to export Tenable.io API objects and index them
+        :return:
+        """
+        # self.checkpoint = self.execute_read_query("select max(checkpoint) from export_jobs where job_end is not null")
+        cursor = self.conn.cursor()
+        t = datetime.now(timezone.utc)
+        logger.info(f"Running tenable export job at {t}")
+        cursor.execute("INSERT INTO export_jobs (job_start) VALUES (TIMESTAMP %s) RETURNING id", [t])
+        id = cursor.fetchone()[0]
+        if self.checkpoint == 0:
+            logger.info('No previous checkpoint found, exporting all assets and vulns... ')
+            self.export_all()
+        else:
+            # last_period = int(time.time()) - 604800
+            self.insert_objects('assets', self.tio.exports.assets(created_at=self.checkpoint))
+            self.update_objects('assets', self.tio.exports.assets(updated_at=self.checkpoint))
+            self.delete_objects('assets', self.tio.exports.assets(deleted_at=self.checkpoint))
+            self.delete_objects('assets', self.tio.exports.assets(terminated_at=self.checkpoint))
+
+        cursor.execute('UPDATE export_jobs SET job_end = TIMESTAMP %s WHERE id = %s', [datetime.now(timezone.utc), id])
+        self.conn.commit()
+        logger.info('Update assets and vulns, time is: %s' % datetime.now())
+
+    def insert_objects(self, table, objects):
+        cursor = self.conn.cursor()
+        count = 0
+        start = time.time()
+        for obj in objects:
+            count += 1;
+            cursor.execute(sql.SQL("INSERT INTO {} (jdoc) VALUES (%s)")
+                           .format(sql.Identifier(table)), (json.dumps(obj), ))
+            if count % 100 == 0:
+                logger.info("{} {} exported and indexed...".format(count, table))
+        self.conn.commit()
+        logger.info("{} {} exported and indexed, took {}s".format(count, table, time.time()-start))
+
+    def update_objects(self, table, objects):
+        cursor = self.conn.cursor()
+        count = 0
+        start = time.time()
+        for obj in objects:
+            count += 1;
+            cursor.execute("UPDATE %s SET jdoc = %s WHERE id = %s", (table, json.dumps(obj), obj['id']))
+            if count % 100 == 0:
+                logger.info("{} {}'s updated in database...".format(count, table))
+        self.conn.commit()
+        logger.info("{} {}'s updated, took {}s".format(count, table, time.time()-start))
 
 
-def write_assets(outfile):
-    '''
-    Export assets and save them in a file
-    :param outfile:
-    :return:
-    '''
-
-    # assets = tio.exports.assets()
-    # asset = assets.next()
-    # vuls = tio.exports.vulns()
-    # store all assets into a file, one json each line
-    with open('../data/assets.json', 'a') as outfile:
-        for asset in tio.assets.list():
-            json.dump(asset, outfile)
-            outfile.write('\n')
-
-
-
-# MyLoggingCursor simply sets self.timestamp at start of each query
-class MyLoggingCursor(LoggingCursor):
-    def execute(self, query, vars=None):
-        self.timestamp = time.time()
-        return super(MyLoggingCursor, self).execute(query, vars)
-
-    def callproc(self, procname, vars=None):
-        self.timestamp = time.time()
-        return super(MyLoggingCursor, self).callproc(procname, vars)
-
-
-# MyLogging Connection:
-#   a) calls MyLoggingCursor rather than the default
-#   b) adds resulting execution (+ transport) time via filter()
-class MyLoggingConnection(LoggingConnection):
-    def filter(self, msg, curs):
-        return "   %d ms".format(int((time.time() - curs.timestamp) * 1000))
-
-    def cursor(self, *args, **kwargs):
-        kwargs.setdefault('cursor_factory', MyLoggingCursor)
-        return LoggingConnection.cursor(self, *args, **kwargs)
-
-
-
-
-
-
-
-
-
-
-
-
-def search_asset(conn, **kwargs):
-    '''
-    Find assets where keys and values match as passed with parameters
-    e.g. search_asset(conn, id='3a7efde2-7106-495a-acb7-3157c56dec41')
-    search_asset(conn, id='3a7efde2-7106-495a-acb7-3157c56dec41', has_agent=True)
-
-    :param conn:
-    :param kwargs:
-    :return: list of assets (as dicts), empty list if nothing found
-    '''
-    query = '''SELECT * FROM asset WHERE asset_data @> %s''' % Json(kwargs)
-    return execute_read_query(conn, query)
-
-
-# def search_asset(conn, id):
-#     from psycopg2.extras import Json
-#     cursor = conn.cursor()
-#     # query = cursor.mogrify("SELECT * FROM asset WHERE asset_data @> %s", ({"id": "f5854291-b248-4487-a3f0-08727767f8e2"},))
-#     print(execute_read_query(conn, '''SELECT * FROM asset WHERE asset_data @> %s''' % Json({"id": id})))
-#     return None
 
 def find_largest_databases(conn):
     cursor = conn.cursor()
@@ -289,14 +273,26 @@ FROM pg_catalog.pg_database d
     return cursor.fetchall()
 
 
-# def main():
-#     conn = create_connection("tenable", "admin", "secret", "postgres", "5432")
-#     print("Asset count = {}".format(count_asset(conn)))
-#     populate_assets(conn, 100000)
-#     print("Stuffed to {} assets".format(count_asset(conn)))
-#     search_asset(conn, 0)
-#
-#
-# if __name__ == "__main__":
-#     main()
 
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Launch indexing Tenable assets and vulnerabilities',
+        add_help=False
+    )
+    parser.add_argument('-h', '--db_host', type=str, help='database host', default='postgres')
+    parser.add_argument('-d', '--db_name', type=str, help='database name', default='tenable',)
+    parser.add_argument('-p', '--db_port', type=int, help='database port', default=5432)
+    parser.add_argument('-u', '--db_user', type=str, help='database username', default='admin')
+    parser.add_argument('-w', '--db_password', type=str, help='database password', default='secret')
+    parser.add_argument('-a', '--access_key', type=str, help='Tenable.io access key')
+    parser.add_argument('-s', '--secret_key', type=str, help='Tenable.io secret key')
+    parser.add_argument('-c', '--cron', type=str, help='Schedule with cron job string')
+    parser.add_argument('-i', '--interval', type=str, help='Schedule with interval string')
+
+    args = vars(parser.parse_args())
+
+    search = TenableSearch(access=args['access_key'], secret=args['secret_key'])
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(search.run_export_job, 'interval', seconds=10)
+    scheduler.start()
+    print('Press Ctrl+{0} to exit'.format('Break' if os.name == 'nt' else 'C'))
