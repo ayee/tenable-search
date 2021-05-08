@@ -143,6 +143,10 @@ class TestTenableSearch(TestCase):
         cursor.execute('UPDATE export_jobs SET job_end = TIMESTAMP %s WHERE id = %s', [datetime.now(timezone.utc), id])
         self._search.conn.commit()
 
+    def test_export_scan_list(self):
+        for scan in self._search.tio.scans.list():
+            print(scan)
+
 
 
 

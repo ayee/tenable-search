@@ -62,7 +62,7 @@ class TenableSearch:
             )
             conn.autocommit = False
             # conn.initialize(logger)
-            print("Connection to PostgreSQL DB successful")
+            logger.info("Connection to PostgreSQL DB successful")
         except OperationalError as e:
             print("The error '{}' occurred".format(e))
         return conn
@@ -199,6 +199,8 @@ class TenableSearch:
         logger.info('Initializing assets export')
         self.insert_objects('assets', self.tio.exports.assets())
         self.insert_objects('vulns', self.tio.exports.vulns())
+        self.insert_objects('scans', self.tio.scans.list())
+        self.insert_objects('policies', self.tio.policies.list())
 
     def run_export_job(self):
         """
@@ -212,7 +214,7 @@ class TenableSearch:
         cursor.execute("INSERT INTO export_jobs (job_start) VALUES (TIMESTAMP %s) RETURNING id", [t])
         id = cursor.fetchone()[0]
         if self.checkpoint == 0:
-            logger.info('No previous checkpoint found, exporting all assets and vulns... ')
+            logger.info('No checkpoint found, exporting all objects... ')
             self.export_all()
         else:
             # last_period = int(time.time()) - 604800

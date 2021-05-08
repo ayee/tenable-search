@@ -48,7 +48,8 @@ When this program is resumed, it will query
 2. Are the asset objects returned by pyTenable and exports API ordered by any fields, updated_at?
 
 ### How to build
-This project uses [docker-compose](https://docs.docker.com/compose/) to bring up instance of a Postgres database while separating API code into another
+This project uses [docker-compose](https://docs.docker.com/compose/) to containerize and separate a Postgres database instance and the Python runtime with TenableSearch and pyTenable code.  This makes it easier to adapt the project to different storage types.
+
 Run this to build dockers
 
     docker-compose build
@@ -61,6 +62,12 @@ To connect to Postgres database with `psql` client
 
     docker exec -it tenable-search_postgres_1 psql -U admin
     
+If database schema is changed, you'll have to delete the data directory completely and rebuild
+
+    docker-compose down
+    rm -fr postgres_data
+    docker-compose build
+    docker-compose up
     
 ### Other Useful Postgres Commands
 Listing databases
@@ -95,6 +102,39 @@ SELECT jdoc->>'id' FROM assets
     WHERE jdoc @> '{"ipv4": ["25.150.68.229"]}' 
     OR jdoc @> '{"fqdn": ["tnxlphzmyv"]}';
 ```
+Once an asset has been identified, all vulnerabilities of the asset can be retrieved like this:
+```postgresql
+select substring(jdoc->'scan'->>'uuid',1,8), substring(jdoc->'plugin'->>'name',1,10), jdoc->'scan'->>'completed_at' from vulns 
+    where jdoc->'asset' @> '{"uuid":"f7c9b98d-626f-47f3-87f3-8428043fccf2"}';
+```
+
+Here's a query to join `scans` and `vulns` tables on scan UUID
+```sql
+select s.jdoc->>'name', s.jdoc->>'policy_id', v.jdoc->'scan'->>'uuid', substring(v.jdoc->'plugin'->>'name',1,10) 
+    from vulns v join scans s 
+    on v.jdoc->'scan'->>'uuid' = s.jdoc->>'uuid';
+```
+Because `scan` only has policy_id but not other policy details, we might need a query to join `policies` table
+```sql
+select 
+    s.jdoc->>'name' as scan_name, 
+    s.jdoc->>'policy_id' as policy_id, 
+    p.jdoc->>'name' as policy_name, 
+    substring(v.jdoc->'plugin'->>'name',1,10) as plugin_name
+from vulns v 
+    join scans s on v.jdoc->'scan'->>'uuid' = s.jdoc->>'uuid'
+    join policies p on s.jdoc->>'policy_id' = p.jdoc->>'id';
+```
+Expected output:
+```text
+                     scan_name                      | policy_id |          policy_name           | plugin_name 
+----------------------------------------------------+-----------+--------------------------------+-------------
+ fs_Basic Network Scan - DNS_TEST1618448104.75151   | 2773      | Basic Network Scan - DNS       | RPC Servic
+ fs_Basic Network Scan - DNS_TEST1618448104.75151   | 2773      | Basic Network Scan - DNS       | Common Pla
+ fs_Basic Network Scan - DNS_TEST1618448104.75151   | 2773      | Basic Network Scan - DNS       | RPC Servic
+ fs_Basic Network Scan - DNS_TEST1618448104.75151   | 2773      | Basic Network Scan - DNS       | OS Identif
+```
+
 
 Delete a single asset matching the asset UUID
 ```sql
