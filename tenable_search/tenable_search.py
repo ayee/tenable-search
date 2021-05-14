@@ -24,9 +24,9 @@ def timeit(func):
 
 
 class TenableSearch:
-    '''
+    """
     Class abstraction of all objects retrieved from Tenable.io
-    '''
+    """
     conn = None
     tio = None
     # timestamp at which the last export was executed,
@@ -42,14 +42,15 @@ class TenableSearch:
 
     # def create_connection(self, db_name, db_user, db_password, db_host, db_port):
     def create_connection(selfs, **kwargs):
-        ''' Create postgres connection with psycopg2
+        """
+        Create postgres connection with psycopg2
         :param db_name: name of database
         :param db_user:
         :param db_password:
         :param db_host:
         :param db_port:
         :return:
-        '''
+        """
         conn = None
         try:
             conn = psycopg2.connect(
@@ -161,20 +162,20 @@ class TenableSearch:
         self.conn.commit()
 
     def get_size(self):
-        '''
+        """
         Get disk storage of Tenable result search index
         :return: size in bytes
-        '''
+        """
         cursor = self.conn.cursor()
         cursor.execute(
-            '''
+            """
             SELECT 
                 CASE WHEN pg_catalog.has_database_privilege(d.datname, 'CONNECT')
                     THEN pg_catalog.pg_size_pretty(pg_catalog.pg_database_size(d.datname))
                     ELSE 'No Access'
                 END as Size
             FROM pg_catalog.pg_database d WHERE d.datname = 'tenable'
-            '''
+            """
         )
         return cursor.fetchall()[0][0]
 
@@ -186,15 +187,15 @@ class TenableSearch:
         :param kwargs:
         :return: list of assets (as dicts), empty list if nothing found
         """
-        query = '''SELECT * FROM assets WHERE jdoc @> %s''' % Json(kwargs)
+        query = "SELECT * FROM assets WHERE jdoc @> %s" % Json(kwargs)
         result = self.execute_read_query(query)
         return result
 
     def export_all(self):
-        '''
+        """
         Export and index all objects
         :return:
-        '''
+        """
         # if tables are not empty, error out
         logger.info('Initializing assets export')
         self.insert_objects('assets', self.tio.exports.assets())
@@ -257,7 +258,7 @@ class TenableSearch:
 def find_largest_databases(conn):
     cursor = conn.cursor()
     cursor.execute(
-        '''
+        """
         SELECT d.datname as Name,  pg_catalog.pg_get_userbyid(d.datdba) as Owner,
     CASE WHEN pg_catalog.has_database_privilege(d.datname, 'CONNECT')
         THEN pg_catalog.pg_size_pretty(pg_catalog.pg_database_size(d.datname))
@@ -270,7 +271,7 @@ FROM pg_catalog.pg_database d
         ELSE NULL
     END desc -- nulls first
     LIMIT 20
-        '''
+        """
     )
     return cursor.fetchall()
 
