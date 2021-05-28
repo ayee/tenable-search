@@ -6,6 +6,7 @@ from psycopg2 import OperationalError, sql
 from psycopg2.extras import LoggingConnection, LoggingCursor, Json
 from tenable.io import TenableIO
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.blocking import BlockingScheduler
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -19,7 +20,9 @@ def timeit(func):
             return func(*args, **kwargs)
         finally:
             end_ = time.perf_counter() - start
-            logger.info(f"{func.__name__} total exec time={end_ * 1000:.2f}ms {'['+str(args[1])+']' if len(args)>1 else ''} ")
+            logger.info(f"{func.__name__} "
+                        f"{'['+str(args[1])+']' if len(args)>1 else ''} "
+                        f"total exec time={end_ * 1000:.2f}ms")
     return _time_it
 
 
@@ -33,23 +36,17 @@ class TenableSearch:
     # 0 if export has never been executed
     checkpoint = 0
 
-    def __init__(self, access, secret):
-        with pkg_resources.resource_stream(__name__, r'settings.yml') as file:
-            properties = yaml.full_load(file)
+    def __init__(self, properties):
         self.tio = TenableIO(properties['access_key'], properties['secret_key'])
         self.conn = self.create_connection(**properties)
-        self.checkpoint = self.execute_read_query("select max(checkpoint) from export_jobs where job_end is not null")
+        logger.info('Database connection created')
 
     # def create_connection(self, db_name, db_user, db_password, db_host, db_port):
-    def create_connection(selfs, **kwargs):
+    @staticmethod
+    def create_connection(**kwargs):
         """
-        Create postgres connection with psycopg2
-        :param db_name: name of database
-        :param db_user:
-        :param db_password:
-        :param db_host:
-        :param db_port:
-        :return:
+        Create Postgres connection using psycopg2
+        :return: connection
         """
         conn = None
         try:
@@ -74,11 +71,12 @@ class TenableSearch:
         result = None
         try:
             cursor.execute(query)
+            self.conn.commit()
             result = cursor.fetchall()
-            # logger.info("Query [{}] took {}".format(query, end - start))
+            logger.info("Query [{}] executed successfully with result {}".format(query, result))
             return result
         except OperationalError as e:
-            logger.error("The error '{}' occurred".format(e))
+            logger.error(f"The error '{e}' occurred")
 
     @timeit
     def populate_assets(self, size=None, vuln_asset_ratio=2):
@@ -140,9 +138,10 @@ class TenableSearch:
 
     def delete_all_tables(self):
         cursor = self.conn.cursor()
-        cursor.execute('DELETE FROM assets')
-        cursor.execute('DELETE FROM vulns')
-        cursor.execute('DELETE FROM export_jobs')
+        table_list = {'assets', 'vulns', 'scans', 'policies', 'export_jobs'}
+        for t in table_list:
+            cursor.execute(f'DELETE FROM {t}')
+            self.conn.commit()
 
         # Run full vacuum to clear up database
         old_isolation_level = self.conn.isolation_level
@@ -191,90 +190,129 @@ class TenableSearch:
         result = self.execute_read_query(query)
         return result
 
-    def export_all(self):
+    def export_initial(self):
         """
+        Delete all objects in tenable database including jobs data
         Export and index all objects
         :return:
         """
+        self.delete_all_tables()
         # if tables are not empty, error out
-        logger.info('Initializing assets export')
+        logger.info('Exporting assets and vulns')
         self.insert_objects('assets', self.tio.exports.assets())
         self.insert_objects('vulns', self.tio.exports.vulns())
+        logger.info('Exporting scans and policies')
         self.insert_objects('scans', self.tio.scans.list())
         self.insert_objects('policies', self.tio.policies.list())
 
+    @timeit
     def run_export_job(self):
         """
         Run scheduled job to export Tenable.io API objects and index them
         :return:
         """
-        # self.checkpoint = self.execute_read_query("select max(checkpoint) from export_jobs where job_end is not null")
-        cursor = self.conn.cursor()
-        t = datetime.now(timezone.utc)
-        logger.info(f"Running tenable export job at {t}")
-        cursor.execute("INSERT INTO export_jobs (job_start) VALUES (TIMESTAMP %s) RETURNING id", [t])
-        id = cursor.fetchone()[0]
+        start = datetime.now(timezone.utc)
+        logger.info(f"Starting export job at {start}")
+
+        result = self.execute_read_query("select max(checkpoint) from export_jobs where job_end is not null")
+        self.checkpoint = 0 if result[0][0] is None else result[0][0]
+
         if self.checkpoint == 0:
-            logger.info('No checkpoint found, exporting all objects... ')
-            self.export_all()
+
+            logger.info('No existing checking found, initializing Tenable export database...')
+            self.export_initial()
         else:
-            # last_period = int(time.time()) - 604800
-            self.insert_objects('assets', self.tio.exports.assets(created_at=self.checkpoint))
-            self.update_objects('assets', self.tio.exports.assets(updated_at=self.checkpoint))
-            self.delete_objects('assets', self.tio.exports.assets(deleted_at=self.checkpoint))
-            self.delete_objects('assets', self.tio.exports.assets(terminated_at=self.checkpoint))
+            print(self.checkpoint)
+            logger.info(
+                'Checkpoint found: {}'.format(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.checkpoint))))
+            self.export_update()
 
-        cursor.execute('UPDATE export_jobs SET job_end = TIMESTAMP %s WHERE id = %s', [datetime.now(timezone.utc), id])
+        end = datetime.now(timezone.utc)
+        logger.info(f"Logging in database completed export job at {end}")
+        cursor = self.conn.cursor()
+        cursor.execute("INSERT INTO export_jobs (job_start, job_end) VALUES (TIMESTAMP %s, TIMESTAMP %s)", [start, end])
+        # cursor.execute('UPDATE export_jobs SET job_end = TIMESTAMP %s WHERE id = %s', [t, job_id])
+        logger.info('Updated export_jobs record')
         self.conn.commit()
-        logger.info('Update assets and vulns, time is: %s' % datetime.now())
 
+    @timeit
+    def export_update(self):
+        """
+        Assume there are already objects previously stored in database, export
+        newly created, updated, terminated, and deleted assets
+        :return:
+        """
+        # insert assets created since checkpoint
+        self.insert_objects('assets', self.tio.exports.assets(created_at=self.checkpoint))
+        # update assets updated since checkpoint
+        self.update_assets(self.tio.exports.assets(updated_at=self.checkpoint))
+        # delete assets deleted and terminated since checkpoint
+        self.delete_assets(self.tio.exports.assets(deleted_at=self.checkpoint))
+        self.delete_assets(self.tio.exports.assets(terminated_at=self.checkpoint))
+        # insert vulns found since checkpoint
+        self.insert_objects('vulns', self.tio.exports.vulns(last_found=self.checkpoint))
+        # delete vulns fixed since checkpoint
+        self.delete_vulns(self.tio.exports.vulns(last_fixed=self.checkpoint))
+        # remove and repopulate all scans
+        cursor = self.conn.cursor()
+        cursor.execute('DELETE FROM scans')
+        self.insert_objects('scans', self.tio.scans.list())
+        # remove and repopulate all policies
+        cursor.execute('DELETE FROM policies')
+        self.insert_objects('policies', self.tio.policies.list())
+
+
+    @timeit
     def insert_objects(self, table, objects):
+        query = "INSERT INTO {} (jdoc) VALUES (%s)"
         cursor = self.conn.cursor()
         count = 0
-        start = time.time()
         for obj in objects:
-            count += 1;
-            cursor.execute(sql.SQL("INSERT INTO {} (jdoc) VALUES (%s)")
-                           .format(sql.Identifier(table)), (json.dumps(obj), ))
+            count += 1
+            cursor.execute(sql.SQL(query).format(sql.Identifier(table)), (json.dumps(obj), ))
             if count % 100 == 0:
                 logger.info("{} {} exported and indexed...".format(count, table))
         self.conn.commit()
-        logger.info("{} {} exported and indexed, took {}s".format(count, table, time.time()-start))
 
-    def update_objects(self, table, objects):
+    @timeit
+    def update_assets(self, assets):
+        s = "UPDATE assets SET jdoc = %s WHERE jdoc->>'id' = %s"
         cursor = self.conn.cursor()
         count = 0
-        start = time.time()
-        for obj in objects:
-            count += 1;
-            cursor.execute("UPDATE %s SET jdoc = %s WHERE id = %s", (table, json.dumps(obj), obj['id']))
+        for obj in assets:
+            count += 1
+            print(obj)
+            cursor.execute(s, (json.dumps(obj), obj['id']))
             if count % 100 == 0:
-                logger.info("{} {}'s updated in database...".format(count, table))
+                logger.info(f"{count} assets updated in database...")
         self.conn.commit()
-        logger.info("{} {}'s updated, took {}s".format(count, table, time.time()-start))
 
+    @timeit
+    def delete_vulns(self, vulns):
+        query = "DELETE FROM vulns " \
+                       "WHERE jdoc->'asset'->>'uuid' = %s AND " \
+                       "jdoc->'scan'->>'uuid' = %s"
+        cursor = self.conn.cursor()
+        count = 0
+        for v in vulns:
+            count += 1
+            cursor.execute(query, (v['asset']['uuid'], v['scan']['uuid']))
+            if count % 100 == 0:
+                logger.info("{} vulns deleted in database...".format(count))
+        self.conn.commit()
 
-
-def find_largest_databases(conn):
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT d.datname as Name,  pg_catalog.pg_get_userbyid(d.datdba) as Owner,
-    CASE WHEN pg_catalog.has_database_privilege(d.datname, 'CONNECT')
-        THEN pg_catalog.pg_size_pretty(pg_catalog.pg_database_size(d.datname))
-        ELSE 'No Access'
-    END as Size
-FROM pg_catalog.pg_database d
-    order by
-    CASE WHEN pg_catalog.has_database_privilege(d.datname, 'CONNECT')
-        THEN pg_catalog.pg_database_size(d.datname)
-        ELSE NULL
-    END desc -- nulls first
-    LIMIT 20
-        """
-    )
-    return cursor.fetchall()
-
+    @timeit
+    def delete_assets(self, assets):
+        delete_query = "DELETE FROM assets " \
+                       "WHERE jdoc->>'id' = %s"
+        cursor = self.conn.cursor()
+        count = 0
+        for a in assets:
+            count += 1
+            cursor.execute(delete_query, (a['id']))
+            if count % 100 == 0:
+                logger.info("{} assets deleted in database...".format(count))
+        self.conn.commit()
 
 
 if __name__ == '__main__':
@@ -292,10 +330,16 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--cron', type=str, help='Schedule with cron job string')
     parser.add_argument('-i', '--interval', type=str, help='Schedule with interval string')
 
-    args = vars(parser.parse_args())
+    properties = vars(parser.parse_args())
 
-    search = TenableSearch(access=args['access_key'], secret=args['secret_key'])
-    scheduler = BackgroundScheduler()
+    if properties['access_key'] is None or properties['secret_key'] is None:
+        # if no arguments passed, try load from settings file
+        with pkg_resources.resource_stream(__name__, r'./settings.yml') as file:
+            properties = yaml.full_load(file)
+            logger.info(f'Loaded properties from settings.yml')
+
+    search = TenableSearch(properties)
+    scheduler = BlockingScheduler()
     scheduler.add_job(search.run_export_job, 'interval', seconds=10)
     scheduler.start()
     print('Press Ctrl+{0} to exit'.format('Break' if os.name == 'nt' else 'C'))

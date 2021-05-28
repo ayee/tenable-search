@@ -1,5 +1,4 @@
-import json
-import time
+import json, time, pkg_resources, yaml
 from unittest import TestCase
 import sys, os, logging
 from datetime import datetime, timezone
@@ -13,9 +12,10 @@ class TestTenableSearch(TestCase):
     _search = None
 
     def setUp(self):
-        access_key = 'f4093b4d2601b8e9722999ed1fed28916e9f285fa116baa8118fee130ef62d67'
-        secret_key = '9ed1f218605eceac2306768369a0cac0a951cd31ced8fc2f39dfb49c88c55d67'
-        self._search = tenable_search.TenableSearch(access_key, secret_key)
+        properties = {}
+        with pkg_resources.resource_stream(__name__, r'settings.yml') as file:
+            properties = yaml.full_load(file)
+        self._search = tenable_search.TenableSearch(properties)
 
     def test_count_assets(self):
         count = self._search.count_assets()
@@ -130,6 +130,10 @@ class TestTenableSearch(TestCase):
     def test_run_export_job(self):
         self._search.checkpoint = 0
         self._search.run_export_job()
+
+    def test_export_update(self):
+        self._search.checkpoint = 0
+        self._search.export_update()
 
     def test_get_tenable_database_size(self):
         db_size = self._search.get_size()
